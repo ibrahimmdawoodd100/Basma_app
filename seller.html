@@ -837,6 +837,7 @@ async function openPanel(cid) {
     <div class="panel-actions">
       ${c.status==='active'?`<button class="action-btn-sm btn-red" onclick="suspendCompany('${cid}');closePanel()">⛔ تعليق</button>`:`<button class="action-btn-sm btn-green" onclick="activateCompany('${cid}');closePanel()">✅ تفعيل</button>`}
       <button class="action-btn-sm btn-gray" onclick="resetManagerCredentials('${cid}')">🔑 إعادة تعيين بيانات الدخول</button>
+      <button class="action-btn-sm btn-blue" onclick="syncTenantData('${cid}')">🔄 مزامنة البيانات مع مشروع الزبون</button>
     </div>
   </div>`;
 }
@@ -844,6 +845,37 @@ async function openPanel(cid) {
 function togglePwVisible(cid, pw) {
   const el = document.getElementById('pnl-pw-' + cid);
   el.textContent = el.textContent === pw ? '••••••••' : pw;
+}
+
+async function syncTenantData(cid) {
+  const c = allCompanies[cid];
+  if (!c) return;
+  const tenantConfig = c.info.tenantConfig;
+  if (!tenantConfig) { showToast('لا توجد إعدادات Firebase محفوظة لهذه الشركة — أدخلها أول عبر "إعادة تعيين بيانات الدخول"', 'error'); return; }
+  showLoading('جاري مزامنة البيانات مع مشروع الزبون...');
+  try {
+    const whNames = c.warehouses ? Object.values(c.warehouses).map(w => w.name) : [];
+    const tempAppName = 'tenantTemp_' + Date.now();
+    const tenantApp = firebase.initializeApp(tenantConfig, tempAppName);
+    try {
+      const tdb = tenantApp.database();
+      const existing = await tdb.ref(`companies/${cid}/info`).once('value');
+      if (existing.exists()) {
+        hideLoading();
+        showToast('بيانات الشركة موجودة أصلاً بمشروعها — لا حاجة للمزامنة', 'info');
+        return;
+      }
+      await tdb.ref(`companies/${cid}`).set({ info: c.info, settings: c.settings || {} });
+      const names = whNames.length ? whNames : ['الفرع الرئيسي'];
+      for (const whName of names) {
+        await tdb.ref(`companies/${cid}/warehouses`).push({ name: whName, pin: '1234', active: true });
+      }
+    } finally {
+      await tenantApp.delete();
+    }
+    hideLoading();
+    showToast('✅ تمت المزامنة! جرّب تسجيل دخول المدير الآن', 'success');
+  } catch(e) { hideLoading(); showToast('خطأ: ' + e.message, 'error'); }
 }
 
 async function resetManagerCredentials(cid) {
@@ -964,6 +996,43 @@ function renderDefaultWHs() {
 
 function removeWH(i) { defaultWHs.splice(i,1); renderDefaultWHs(); }
 
+// يكتب نسخة الإعدادات الأساسية (معلومات الشركة + الإعدادات + فرع افتراضي)
+// داخل مشروع Firebase الخاص بالزبون نفسه (tenantConfig) — هذا هو المشروع
+// اللي يتصل فيه تطبيقا المدير والموظف فعليًا بعد تسجيل الدخول، فلازم
+// تكون بياناته موجودة هناك، مو بس بقاعدة بيانات المورد.
+async function seedTenantCompanyDoc(cid, companyData, warehouseNames) {
+  const tempAppName = 'tenantTemp_' + Date.now();
+  const tenantApp = firebase.initializeApp(companyData.info.tenantConfig, tempAppName);
+  try {
+    const tdb = tenantApp.database();
+    const existing = await tdb.ref(`companies/${cid}/info`).once('value');
+    if (!existing.exists()) {
+      await tdb.ref(`companies/${cid}`).set({ info: companyData.info, settings: companyData.settings });
+      const names = (warehouseNames && warehouseNames.length) ? warehouseNames : ['الفرع الرئيسي'];
+      for (const whName of names) {
+        await tdb.ref(`companies/${cid}/warehouses`).push({ name: whName, pin: '1234', active: true });
+      }
+    } else {
+      // الشركة موجودة أصلاً بمشروعها — لا نلمس بيانات موظفيها وحضورهم،
+      // نكتفي بتحديث معلومات الدخول فقط لاحقًا عبر updateTenantManagerInfo
+    }
+  } finally {
+    await tenantApp.delete();
+  }
+}
+
+// يحدّث بيانات دخول المدير (يوزر/uid) داخل مشروع الزبون نفسه أيضًا،
+// بدون التأثير على أي بيانات تشغيلية أخرى بذلك المشروع.
+async function updateTenantManagerInfo(tenantConfig, cid, patch) {
+  const tempAppName = 'tenantTemp_' + Date.now();
+  const tenantApp = firebase.initializeApp(tenantConfig, tempAppName);
+  try {
+    await tenantApp.database().ref(`companies/${cid}/info`).update(patch);
+  } finally {
+    await tenantApp.delete();
+  }
+}
+
 async function createCompany() {
   const nameAr = document.getElementById('nc-name-ar').value.trim();
   const nameEn = document.getElementById('nc-name-en').value.trim();
@@ -1007,7 +1076,7 @@ async function createCompany() {
       }
     };
     await DB.ref(`companies/${cid}`).set(companyData);
-    // Add warehouses
+    // Add warehouses (نسخة المورد للتتبع فقط)
     for (const whName of defaultWHs) {
       const whPin = '1234';
       await DB.ref(`companies/${cid}/warehouses`).push({ name: whName, pin: whPin, active: true });
@@ -1015,6 +1084,9 @@ async function createCompany() {
     if (!defaultWHs.length) {
       await DB.ref(`companies/${cid}/warehouses`).push({ name: 'الفرع الرئيسي', pin: '1234', active: true });
     }
+    // الأهم: زرع نفس البيانات فعليًا بمشروع Firebase الخاص بالزبون
+    // (هذا هو المشروع اللي يتصل فيه تطبيقا المدير والموظف بعد تسجيل الدخول)
+    await seedTenantCompanyDoc(cid, companyData, defaultWHs);
     // Add transaction
     await DB.ref('seller/transactions').push({ companyId: cid, companyName: nameAr, plan: 'lifetime', amount: LIFETIME_PRICE, dateStr: new Date().toISOString().split('T')[0], date: Date.now(), note: 'اشتراك مدى الحياة' });
     // Seller notification
@@ -1026,6 +1098,7 @@ async function createCompany() {
     const password = genPassword();
     const managerUid = await withTimeout(createDirectoryAccount({ role: 'manager', username, password, companyId: cid, companyName: nameAr, tenantConfig: fbCfg }), 15000);
     await DB.ref(`companies/${cid}/info`).update({ managerUsername: username, managerPassword: password, managerUid });
+    await updateTenantManagerInfo(fbCfg, cid, { managerUsername: username, managerUid });
     hideLoading();
     showToast('تم إنشاء الشركة وحساب المدير بنجاح!', 'success');
     document.getElementById('nc-admin-username').textContent = username;
@@ -1253,4 +1326,4 @@ function showLoading(text='جاري التحميل...') { document.getElementByI
 function hideLoading() { document.getElementById('loading-overlay').classList.remove('active'); }
 </script>
 </body>
-</html>
+  </html>
