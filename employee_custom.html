@@ -631,8 +631,8 @@ const DIRECTORY_CONFIG = {
 const DIRECTORY_EMAIL_DOMAIN = 'basma.app';
 
 function getStoredTenant() {
-  const cfg = localStorage.getItem('tenant_cfg');
-  const cid = localStorage.getItem('tenant_company_id');
+  const cfg = localStorage.getItem('emp_tenant_cfg');
+  const cid = localStorage.getItem('emp_tenant_company_id');
   if (cfg && cid) { try { return { tenantConfig: JSON.parse(cfg), companyId: cid }; } catch(e) {} }
   return null;
 }
@@ -690,8 +690,8 @@ async function directoryEmployeeLogin() {
       btn.disabled = false; btn.textContent = '✅ دخول';
       return;
     }
-    localStorage.setItem('tenant_cfg', JSON.stringify(record.tenantConfig));
-    localStorage.setItem('tenant_company_id', record.companyId);
+    localStorage.setItem('emp_tenant_cfg', JSON.stringify(record.tenantConfig));
+    localStorage.setItem('emp_tenant_company_id', record.companyId);
     COMPANY_ID = record.companyId;
     const tenantApp = firebase.initializeApp(record.tenantConfig, 'tenantApp');
     DB = tenantApp.database();
@@ -2216,4 +2216,4 @@ function hideLoading() { document.getElementById('loading-overlay').classList.re
 window.addEventListener('DOMContentLoaded', initFirebase);
 </script>
 </body>
-</html>
+  </html>
