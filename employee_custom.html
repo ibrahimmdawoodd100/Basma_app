@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <title>تسجيل الحضور</title>
+<link rel="manifest" href="./manifest-employee.json">
+<meta name="theme-color" content="#22c55e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="بصمة - الموظف">
+<link rel="apple-touch-icon" href="./icon-employee-192.png">
+<link rel="icon" href="./icon-employee-192.png">
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
@@ -2215,5 +2223,12 @@ function hideLoading() { document.getElementById('loading-overlay').classList.re
 // Boot
 window.addEventListener('DOMContentLoaded', initFirebase);
 </script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw-employee.js', { scope: './employee_custom.html' }).catch(() => {});
+  });
+}
+</script>
 </body>
-  </html>
+</html>
