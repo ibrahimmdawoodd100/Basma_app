@@ -3,7 +3,7 @@
   "short_name": "بصمة مدير",
   "description": "لوحة تحكم مدير نظام الحضور الذكي بصمة",
   "start_url": "./admin_custom.html",
-  "scope": "./",
+  "scope": "./admin_custom.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0a0c14",

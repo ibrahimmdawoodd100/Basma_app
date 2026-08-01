@@ -3,7 +3,7 @@
   "short_name": "بصمة موظف",
   "description": "تسجيل حضور وانصراف الموظفين — نظام بصمة",
   "start_url": "./employee_custom.html",
-  "scope": "./",
+  "scope": "./employee_custom.html",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0a0c14",
