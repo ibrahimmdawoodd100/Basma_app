@@ -693,6 +693,23 @@ async function loadAllCompanies() {
   });
 }
 
+// يجيب العدد الحقيقي للموظفين مباشرة من مشروع Firebase الخاص بكل زبون
+// (المكان الفعلي اللي يضيف منه المدير موظفيه)، بدل الرقم القديم المخزّن
+// بقاعدة بيانات المورد (اللي ما تتحدّث تلقائيًا أبدًا).
+async function refreshLiveEmployeeCounts() {
+  const entries = Object.values(allCompanies).filter(c => c.info && c.info.tenantConfig);
+  await Promise.all(entries.map(async (c) => {
+    const tempAppName = 'countTemp_' + c.id + '_' + Date.now();
+    try {
+      const tApp = firebase.initializeApp(c.info.tenantConfig, tempAppName);
+      const snap = await tApp.database().ref(`companies/${c.id}/employees`).once('value');
+      const emps = Object.values(snap.val() || {}).filter(e => e && e.status === 'approved').length;
+      if (allCompanies[c.id]) allCompanies[c.id].empCount = emps;
+      await tApp.delete();
+    } catch (e) { /* شركة وحدة ممكن تفشل (بيانات ناقصة)، لا نوقف الباقي */ }
+  }));
+}
+
 // ==================== DASHBOARD ====================
 async function loadDashboard() {
   showLoading('جاري التحميل...');
@@ -712,6 +729,10 @@ async function loadDashboard() {
     document.getElementById('ds-active').textContent = active;
     document.getElementById('ds-expired').textContent = expired;
     document.getElementById('ds-emps').textContent = totalEmps;
+    refreshLiveEmployeeCounts().then(() => {
+      const liveTotal = Object.values(allCompanies).reduce((s,c)=>s+c.empCount,0);
+      document.getElementById('ds-emps').textContent = liveTotal;
+    });
     // Alerts
     const alertsEl = document.getElementById('dash-alerts');
     alertsEl.innerHTML = '';
@@ -756,6 +777,7 @@ async function loadCompanies() {
     await loadAllCompanies();
     hideLoading();
     filterCompanies();
+    refreshLiveEmployeeCounts().then(() => filterCompanies());
   } catch(e) { hideLoading(); showToast('خطأ', 'error'); }
 }
 
